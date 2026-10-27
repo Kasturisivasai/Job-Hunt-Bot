@@ -1,0 +1,3 @@
+# Zero external dependencies required!
+# The core pipeline runs 100% on Python 3.10+ standard library
+# (urllib, json, re, hashlib, html, unittest) for lightning-fast execution and zero vulnerability overhead.

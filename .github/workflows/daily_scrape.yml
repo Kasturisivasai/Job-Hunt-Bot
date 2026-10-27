@@ -1,0 +1,62 @@
+name: Zero-Click Daily Job Hunt Bot
+
+on:
+  schedule:
+    # Runs daily at 8:00 AM CST (13:00 UTC)
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force alert evaluation (bypass seen cache)'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Run pipeline in dry-run mode (no Telegram alerts sent)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Job Ingestion & Push Mobile Alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TARGET_ROLES: ${{ secrets.TARGET_ROLES }}
+          US_ONLY: 'true'
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FLAGS="$FLAGS --force"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+          fi
+          python pipeline.py $FLAGS
+
+      - name: Commit Updated Deduplication Cache
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          if [ -f "seen_jobs.json" ]; then
+            git add seen_jobs.json
+            git commit -m "chore: update seen jobs deduplication cache [skip ci]" || echo "No new jobs to commit"
+            git push || echo "Push failed or nothing to push"
+          fi
